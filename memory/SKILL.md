@@ -1,55 +1,81 @@
 ---
 name: memory
-description: a file-based long-term memory using a single JSONL file, with append-only writes and recent-window search via bash + jq.
-compatibility: Requires bash and jq; uses rg or grep, tail, tac, date, printf, and touch.
-allowed-tools: Bash(date:*) Bash(jq:*) Bash(printf:*) Bash(touch:*) Bash(tail:*) Bash(rg:*) Bash(grep:*) Bash(tac:*)
+description: Long-term memory across sessions. Always to use this skill at the start of any user request (unless the user explicitly says not to), especially for questions about the user (profile/personal info/preferences), prior constraints or decisions, and resuming ongoing work; use memory_write to persist stable facts for later reuse.
 ---
 
-Use this skill proactively for all user prompt that can benefit from memory across sessions, even if the user does not ask.
+# Memory Skill
 
-## Goal
+## Overview
 
-- Provide two tools: memory_write and memory_search.
-- Memory is stored in a single append-only JSONL file on disk.
-- Writes must always append one valid JSON object per line (JSONL).
-- Reads should prioritize recent entries by searching from the end via a tail window, and only expand the window if needed.
+- Provide two functions: `memory_write` and `memory_search`.
+- Store memory in a single append-only JSONL file (one JSON object per line).
+- Search a recent tail window first; only expand the window if needed.
 
-## Storage
+## Workflow decision tree
 
-- File path, default MEMORY_FILE=~/.codex/memory.jsonl (create if missing).
-- Each line is one JSON object with at least:
-  - ts: ISO8601 timestamp
-  - type: string (e.g., "note", "fact", "task", "todo")
-  - content: string (raw text)
-  - tags: optional array of strings
-  - meta: optional object
-- Never rewrite existing lines. Append-only only.
+### Recall context
+Run `memory_search` at the start of a task when prior context helps (preferences, constraints, ongoing work).
 
-## Quick start
+### Persist knowledge
+Run `memory_write` at the end of a task to store only stable, reusable information.
 
-memory_write(input)
-- Input: {type, content, tags?, meta?}
-- MUST generate valid JSON with correct escaping; do not hand-build JSON strings.
-- Use jq to stringify/escape safely, then append:
-  jq -cn --arg ts "$(date -Is)" --arg type "$type" --arg content "$content" \
-    --argjson tags "$tags_json_or_null" --argjson meta "$meta_json_or_null" \
-    '{ts:$ts,type:$type,content:$content,tags:$tags,meta:$meta}' >> memory.jsonl
-- If tags/meta are not provided, write null or omit fields (choose one consistent approach).
+### Avoid writing
+Do not write secrets, tokens, one-off details, or transient reasoning.
 
+## Setup
+
+Source the script before using the functions:
+
+```bash
+source scripts/memory.sh
+```
+
+Optionally override the storage file:
+
+```bash
+export MEMORY_FILE="$HOME/.codex/memory.jsonl"
+```
+
+## Storage format
+
+- Store entries in `${MEMORY_FILE:-~/.codex/memory.jsonl}`; create it if missing.
+- Write one JSON object per line with at least:
+  - `ts`: ISO8601 timestamp
+  - `type`: string (e.g., `note`, `fact`, `task`, `todo`)
+  - `content`: string (raw text)
+  - `tags`: optional array of strings
+  - `meta`: optional object
+- Never rewrite existing lines; append only.
+
+## Write workflow (`memory_write`)
+
+- Pass input as JSON: `{type, content, tags?, meta?}`.
+- Generate valid JSON via `jq`; do not hand-build JSON strings.
+- Append exactly one JSON object per line.
+
+Example:
+```bash
+memory_write '{"type":"note","content":"Prefers terse status updates.","tags":["preference"]}'
+```
+
+## Search workflow (`memory_search`)
 
 memory_search(query)
-- Input: {q: string, limit: int=20, window_lines: int=50000, mode: "rg"|"jq"|"hybrid"="hybrid"}
-- Default behavior (hybrid):
-  1) tail -n window_lines memory.jsonl
-  2) rg the query string (treat q as a literal substring by default; optionally support regex if q starts with /.../)
-  3) from matches, parse/validate lines with jq (ignore malformed lines)
-  4) return the most recent results first (since tail window is recent; preserve original order within window, or reverse if easier)
-- If results < limit, expand window_lines exponentially (e.g., *4) up to a max (e.g., 1,000,000 lines) then stop.
-- Output: {results: [json objects], truncated: bool, used_window_lines: int}
+- Pass input as JSON: `{q, limit?, window_lines?}`.
+- Treat `q` as a literal substring.
+- Search a tail window first; expand exponentially if results are insufficient.
+- Return output: `{results, truncated, used_window_lines}`.
 
-## CLI requirements
+Example:
+```bash
+memory_search '{"q":"prefers","limit":5,"window_lines":20000}'
+```
+
+## Requirements
 
 - Depend on standard unix tools: bash, touch, tail, rg (ripgrep), jq.
 - Provide fallbacks: if rg missing, use grep; if jq missing, fail with a clear error.
 - Make sure commands are safe with arbitrary user text (proper quoting).
 - Ensure the skill returns structured JSON to the agent, not raw text logs.
+- Require bash and jq; use rg or grep, tail, date, printf, and touch.
+- Allow tools: Bash(date:*) Bash(jq:*) Bash(printf:*) Bash(touch:*) Bash(tail:*) Bash(rg:*) Bash(grep:*)
