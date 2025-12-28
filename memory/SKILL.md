@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Long-term memory across sessions. Always to use this skill at the start of any user request (unless the user explicitly says not to), especially for questions about the user (profile/personal info/preferences), prior constraints or decisions, and resuming ongoing work; use memory_write to persist stable facts for later reuse.
+description: Long-term memory across sessions. Always use memory_search at the start of any user request (unless the user explicitly says not to), especially for questions about the user (profile/personal info/preferences), prior constraints or decisions, and resuming ongoing work; use memory_write only when the user explicitly asks to store memory.
 ---
 
 # Memory Skill
@@ -14,10 +14,10 @@ description: Long-term memory across sessions. Always to use this skill at the s
 ## Workflow decision tree
 
 ### Recall context
-Run `memory_search` at the start of a task when prior context helps (preferences, constraints, ongoing work).
+Run `memory_search` at the start of every task unless the user explicitly says not to.
 
 ### Persist knowledge
-Run `memory_write` at the end of a task to store only stable, reusable information.
+Run `memory_write` only when the user explicitly asks to store memory, and only for stable, reusable information.
 
 ### Avoid writing
 Do not write secrets, tokens, one-off details, or transient reasoning.
